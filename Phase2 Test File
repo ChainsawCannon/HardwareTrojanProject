@@ -1,0 +1,128 @@
+#include <WiFi.h>
+
+int ledPin = 23;
+int buttonPin = 0;
+
+int pressCount = 0;
+unsigned long firstPressTime = 0;
+bool trojanActive = false;
+bool wifiStarted = false;
+
+// Timing
+unsigned long pressTime = 0;
+unsigned long ledTime = 0;
+unsigned long responseTime = 0;
+
+// Event tracking
+int event_count = 0;
+unsigned long lastSecond = 0;
+int total_presses = 0;
+
+// Logging control
+unsigned long lastPrintTime = 0;
+const int printInterval = 500; // milliseconds
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
+  Serial.begin(115200);
+
+  Serial.println("STARTED");
+  Serial.println("time_ms,wifi_status,response_time,event_count,total_presses");
+}
+
+void loop() {
+  static int lastState = HIGH;
+  int currentState = digitalRead(buttonPin);
+
+  // WiFi status: 0 = off, 1 = connected, 2 = connecting
+  int wifi_status = 0;
+  if (WiFi.status() == WL_CONNECTED) {
+    wifi_status = 1;
+  } else if (wifiStarted) {
+    wifi_status = 2;
+  }
+
+  // Detect button press 
+  if (lastState == HIGH && currentState == LOW) {
+    pressTime = millis();
+    event_count++;
+    total_presses++;
+
+    // LED ON + response time gets measured once
+    digitalWrite(ledPin, HIGH);
+    ledTime = millis();
+    responseTime = ledTime - pressTime;
+
+    if (pressCount == 0) {
+      firstPressTime = millis();
+    }
+
+    pressCount++; // Count the number of presses
+
+    // Trigger the Trojan condition
+    if (pressCount >= 5 && (millis() - firstPressTime <= 3000)) {
+      trojanActive = true;
+    }
+
+    // Reset press window
+    if (millis() - firstPressTime > 3000) {
+      pressCount = 1;
+      firstPressTime = millis();
+    }
+  }
+
+  lastState = currentState;
+
+  // Turn LED off when button is released
+  if (currentState == HIGH) {
+    digitalWrite(ledPin, LOW);
+  }
+
+  // Activate Trojan 
+  if (trojanActive && !wifiStarted) {
+    Serial.println("Trojan Activated!");
+    WiFi.begin("FloridaPoly_Open", "");
+    wifiStarted = true;
+    trojanActive = false;
+  }
+
+  // Show connection progress
+  if (wifiStarted && WiFi.status() != WL_CONNECTED) {
+    static unsigned long lastDot = 0;
+    if (millis() - lastDot > 500) {
+      Serial.print(".");
+      lastDot = millis();
+    }
+  }
+
+  // WiFi connected message
+  if (wifiStarted && WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi Connected");
+    wifiStarted = false;
+  }
+
+  // Reset event count per sec
+  if (millis() - lastSecond >= 1000) {
+    lastSecond = millis();
+    event_count = 0;
+  }
+
+  // Data logging in CSV format
+  if (millis() - lastPrintTime >= printInterval) {
+    lastPrintTime = millis();
+
+    Serial.print(millis());
+    Serial.print(",");
+    Serial.print(wifi_status);
+    Serial.print(",");
+    Serial.print(responseTime);
+    Serial.print(",");
+    Serial.print(event_count);
+    Serial.print(",");
+    Serial.println(total_presses);
+
+    // Reset response time after logging
+    responseTime = 0;
+  }
+}
