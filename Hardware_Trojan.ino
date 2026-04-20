@@ -54,7 +54,7 @@ void activateTrojan() {
   Serial.println("Trojan Activated!");
 
   WiFi.begin("FloridaPoly_Open", "");
-
+  Serial.println("\nWifi Not Connected");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -62,4 +62,13 @@ void activateTrojan() {
 
   Serial.println("\nWiFi Connected");
   Serial.println("Sending: Trojan activated");
+
+  // Keep LED on permanently
+  digitalWrite(ledPin, HIGH);
+
+  // Halt program so nothing turns it off
+  while (true) {
+    delay(1000);
+  
+}
 }
