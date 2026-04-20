@@ -1,0 +1,133 @@
+#include <WiFi.h>
+
+int ledPin = 23;
+int buttonPin = 0;
+
+// Trojan trigger
+int pressCount = 0;
+unsigned long firstPressTime = 0;
+bool trojanActive = false;
+
+// Metrics
+unsigned long pressTime = 0;
+unsigned long responseTime = 0;
+
+int eventCount = 0;
+unsigned long eventWindowStart = 0;
+int eventsPerSecond = 0;
+
+// WiFi tracking
+int wifiStatus = 0;
+unsigned long wifiStart = 0;
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
+  Serial.begin(115200);
+
+  randomSeed(analogRead(0));
+
+  Serial.println("WiFi_status,response_time,events_per_second");
+}
+
+void loop() {
+  static int lastState = HIGH;
+  int currentState = digitalRead(buttonPin);
+
+  // Detect button press
+  if (lastState == HIGH && currentState == LOW) {
+
+    pressTime = millis();
+
+    // Trojan trigger logic
+    if (pressCount == 0) {
+      firstPressTime = millis();
+    }
+
+    pressCount++;
+    eventCount++;
+
+    if (pressCount >= 5 && (millis() - firstPressTime <= 3000)) {
+      trojanActive = true;
+    }
+
+    if (millis() - firstPressTime > 3000) {
+      pressCount = 1;
+      firstPressTime = millis();
+    }
+
+    // Delay ONLY if Trojan (WiFi ON)
+    if (WiFi.status() == WL_CONNECTED) {
+      delay(random(50, 200));  // simulated attack delay
+    }
+
+    // LED ON
+    digitalWrite(ledPin, HIGH);
+
+    // Measure response delay
+    responseTime = millis() - pressTime;
+  }
+
+  // LED OFF when button released
+  if (currentState == HIGH) {
+    digitalWrite(ledPin, LOW);
+  }
+
+  lastState = currentState;
+
+  // Events per second
+  if (eventWindowStart == 0) {
+    eventWindowStart = millis();
+  }
+
+  if (millis() - eventWindowStart >= 1000) {
+    eventsPerSecond = eventCount;
+    eventCount = 0;
+    eventWindowStart = millis();
+  }
+
+  // Activate Trojan
+  if (trojanActive) {
+    activateTrojan();
+    trojanActive = false;
+  }
+
+  // WiFi status
+  wifiStatus = (WiFi.status() == WL_CONNECTED) ? 1 : 0;
+
+  // Optional: auto turn OFF WiFi after 5s (helps dataset variety)
+  if (wifiStatus == 1 && wifiStart == 0) {
+    wifiStart = millis();
+  }
+
+  if (wifiStart != 0 && millis() - wifiStart > 5000) {
+    WiFi.disconnect(true);
+    wifiStart = 0;
+  }
+
+  // CSV output
+  Serial.print(wifiStatus);
+  Serial.print(",");
+  Serial.print(responseTime);
+  Serial.print(",");
+  Serial.println(eventsPerSecond);
+
+  delay(50);
+}
+
+void activateTrojan() {
+  Serial.println("Trojan Activated!");
+
+  WiFi.begin("FloridaPoly_Open", "");
+
+  unsigned long startAttempt = millis();
+
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 5000) {
+    delay(500);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi Connected");
+    Serial.println("Sending: Trojan activated");
+  }
+}
